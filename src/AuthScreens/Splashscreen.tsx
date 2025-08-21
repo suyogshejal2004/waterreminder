@@ -1,9 +1,12 @@
+// Splashscreen.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Animated, Easing, Dimensions, Text } from 'react-native';
 import LottieView from 'lottie-react-native';
 import Sound from 'react-native-sound';
 import LinearGradient from 'react-native-linear-gradient';
 import { replace } from '../Navigation/navigationutils'; // import replace function
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 Sound.setCategory('Playback');
 
@@ -43,6 +46,23 @@ const SplashScreen = () => {
 
       await playSound();
 
+      let routeName = 'Onboarding';
+      const user = auth().currentUser;
+
+      if (user) {
+        try {
+          const userDoc = await firestore().collection('users').doc(user.uid).get();
+          if (userDoc.exists && userDoc.data().height && userDoc.data().weight && userDoc.data().age) {
+            routeName = 'HomeScreen';
+          } else {
+            routeName = 'UserDetails';
+          }
+        } catch (error) {
+          console.error('Error checking user details:', error);
+          routeName = 'UserDetails';
+        }
+      }
+
       // Fade out
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -50,8 +70,8 @@ const SplashScreen = () => {
         easing: Easing.ease,
         useNativeDriver: true,
       }).start(() => {
-        // Navigate to Onboarding after splash
-        replace('Onboarding');
+        // Navigate to appropriate screen
+        replace(routeName);
       });
     };
 

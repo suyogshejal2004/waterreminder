@@ -1,3 +1,4 @@
+// onboarding.js
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import AppIntroSlider from 'react-native-app-intro-slider';

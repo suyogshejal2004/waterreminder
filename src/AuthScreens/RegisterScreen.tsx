@@ -1,146 +1,206 @@
+// RegisterScreen.js
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView
+} from 'react-native';
 import { navigate } from '../Navigation/navigationutils';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
 const RegisterScreen = () => {
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !email || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+    // Removed the 'name' check
+    if (!email.trim() || !password.trim()) {
+      Alert.alert("Missing Fields", "Please fill in both email and password.");
       return;
     }
+    
+    setLoading(true);
+
     try {
       // Create user in Firebase Auth
       const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      const user = userCredential.user;
 
-      // Update display name in Auth profile
-      await userCredential.user.updateProfile({ displayName: name });
-
-      // Store user details in Firestore
-      await firestore().collection("users").doc(userCredential.user.uid).set({
-        name,
-        email,
+      // Store user details in Firestore (without the 'name' field)
+      await firestore().collection("users").doc(user.uid).set({
+        email: user.email,
         createdAt: firestore.FieldValue.serverTimestamp(),
       });
 
-      Alert.alert("Success", "Account created successfully!");
-      navigate("Login");
+      // No need for an alert, just navigate directly for a smoother experience
+      navigate("UserDetails");
+
     } catch (error) {
-      console.error(error);
-      Alert.alert("Registration Error", error.message);
+      console.error("Registration Error:", error.code);
+      let errorMessage = "An unknown error occurred. Please try again.";
+
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = "This email address is already registered. Please login instead.";
+          break;
+        case 'auth/invalid-email':
+          errorMessage = "The email address you entered is not valid.";
+          break;
+        case 'auth/weak-password':
+          errorMessage = "Your password is too weak. It must be at least 6 characters long.";
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = "Network error. Please check your internet connection.";
+          break;
+      }
+
+      Alert.alert("Registration Failed", errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create Account 💧</Text>
-      <Text style={styles.subtitle}>Join AquaBuddy and stay hydrated!</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={styles.title}>Create Account 💧</Text>
+        <Text style={styles.subtitle}>Join AquaBuddy and start your hydration journey!</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name"
-        placeholderTextColor="#666"
-        value={name}
-        onChangeText={setName}
-      />
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#A0AEC0"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#666"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        value={email}
-        onChangeText={setEmail}
-      />
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Password (min. 6 characters)"
+            placeholderTextColor="#A0AEC0"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#666"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Register</Text>
-      </TouchableOpacity>
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Already have an account?</Text>
-        <TouchableOpacity onPress={() => navigate("Login")}>
-          <Text style={styles.footerLink}> Login</Text>
+        <TouchableOpacity 
+          style={[styles.button, loading && styles.buttonDisabled]} 
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>Register</Text>
+          )}
         </TouchableOpacity>
-      </View>
-    </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Already have an account?</Text>
+          <TouchableOpacity onPress={() => navigate("Login")}>
+            <Text style={styles.footerLink}> Login</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 export default RegisterScreen;
 
+// Updated styles to match the modern theme
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E0F7FA',
-    alignItems: 'center',
+    backgroundColor: '#F7F9FC',
+  },
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    alignItems: 'center',
+    padding: 24,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#00796B',
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#1A202C',
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#004D40',
-    marginBottom: 30,
+    color: '#4A5568',
+    marginBottom: 40,
     textAlign: 'center',
+  },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 16,
   },
   input: {
     width: '100%',
-    height: 50,
+    height: 56,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     fontSize: 16,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#B2EBF2',
-    color: '#004D40',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    color: '#1A202C',
   },
   button: {
     width: '100%',
-    height: 50,
-    backgroundColor: '#4DD0E1',
+    height: 56,
+    backgroundColor: '#2B6CB0',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 10,
+    marginBottom: 24,
+    shadowColor: '#2B6CB0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  buttonDisabled: {
+    backgroundColor: '#A0AEC0',
+    elevation: 0,
   },
   buttonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   footer: {
     flexDirection: 'row',
-    marginTop: 15,
+    marginTop: 16,
   },
   footerText: {
-    color: '#004D40',
+    color: '#4A5568',
     fontSize: 15,
   },
   footerLink: {
-    color: '#00796B',
-    fontWeight: '600',
+    color: '#2B6CB0',
+    fontWeight: '700',
     fontSize: 15,
   },
 });

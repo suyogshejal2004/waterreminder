@@ -1,10 +1,10 @@
+// Forgotpass.js
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
 import React, { useState } from 'react';
-import { getAuth, sendPasswordResetEmail } from "firebase/auth";
+import auth from '@react-native-firebase/auth';
 
 const Forgotpass = () => {
   const [email, setEmail] = useState("");
-  const auth = getAuth();
 
   const handleResetPassword = async () => {
     if (!email) {
@@ -12,7 +12,7 @@ const Forgotpass = () => {
       return;
     }
     try {
-      await sendPasswordResetEmail(auth, email);
+      await auth().sendPasswordResetEmail(email);
       Alert.alert("Success", "Password reset link sent to your email");
     } catch (error) {
       Alert.alert("Error", error.message);
