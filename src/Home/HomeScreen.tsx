@@ -40,7 +40,7 @@ const HomeScreen = ({ navigation, route }) => {
       .collection('users')
       .doc(user.uid)
       .onSnapshot(documentSnapshot => {
-        if (documentSnapshot.exists) {
+        if (documentSnapshot?.exists) {
           const fetchedUserData = documentSnapshot.data();
           setUserData(fetchedUserData);
           calculateWaterIntake(fetchedUserData);
@@ -58,7 +58,7 @@ const HomeScreen = ({ navigation, route }) => {
       .collection('dailyIntake')
       .doc(today)
       .onSnapshot(doc => {
-        if (doc.exists) {
+        if (doc?.exists) {
           const data = doc.data();
           setCurrentIntake(data.totalIntake || 0);
           setIntakeHistory(data.history || []);

@@ -22,7 +22,7 @@ const RegisterScreen = () => {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    // Removed the 'name' check
+    // Check for empty fields before proceeding
     if (!email.trim() || !password.trim()) {
       Alert.alert("Missing Fields", "Please fill in both email and password.");
       return;
@@ -31,21 +31,31 @@ const RegisterScreen = () => {
     setLoading(true);
 
     try {
-      // Create user in Firebase Auth
-      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      // Step 1: Create the user in Firebase Authentication
+      const userCredential = await auth().createUserWithEmailAndPassword(email.trim(), password);
       const user = userCredential.user;
 
-      // Store user details in Firestore (without the 'name' field)
-      await firestore().collection("users").doc(user.uid).set({
-        email: user.email,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-      });
+      if (user) {
+        // Step 2: Create a corresponding user document in Firestore
+        await firestore().collection("users").doc(user.uid).set({
+          uid: user.uid,
+          email: user.email,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          // Initialize other fields with default values
+          name: '',
+          age: 0,
+          weight: 0,
+          height: 0,
+        });
 
-      // No need for an alert, just navigate directly for a smoother experience
-      navigate("UserDetails");
+        // Step 3: Redirect to the UserDetails screen for the new user to enter their info.
+        // This is the logic you requested.
+        console.log('Registration successful! Navigating to UserDetails screen...');
+        navigate("UserDetails");
+      }
 
     } catch (error) {
-      console.error("Registration Error:", error.code);
+      console.error("Registration Error:", error.code, error.message);
       let errorMessage = "An unknown error occurred. Please try again.";
 
       switch (error.code) {
@@ -59,8 +69,10 @@ const RegisterScreen = () => {
           errorMessage = "Your password is too weak. It must be at least 6 characters long.";
           break;
         case 'auth/network-request-failed':
-          errorMessage = "Network error. Please check your internet connection.";
+          errorMessage = "Network error. Please check your internet connection and try again.";
           break;
+        default:
+          errorMessage = "Registration failed. Please try again.";
       }
 
       Alert.alert("Registration Failed", errorMessage);
@@ -76,7 +88,7 @@ const RegisterScreen = () => {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={styles.title}>Create Account 💧</Text>
-        <Text style={styles.subtitle}>Join AquaBuddy and start your hydration journey!</Text>
+        <Text style={styles.subtitle}>Join and start your hydration journey!</Text>
 
         <View style={styles.inputContainer}>
           <TextInput
@@ -126,7 +138,6 @@ const RegisterScreen = () => {
 
 export default RegisterScreen;
 
-// Updated styles to match the modern theme
 const styles = StyleSheet.create({
   container: {
     flex: 1,

@@ -15,6 +15,7 @@ import {
   Platform,
   ActivityIndicator,
   SafeAreaView,
+  Alert, // Added Alert for consistency
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -93,10 +94,10 @@ const HomeDashboard = () => {
   };
 
   const getInitials = name => {
-    if (!name) return '?';
+    if (!name || typeof name !== 'string') return '?';
     const parts = name.split(' ');
     return `${parts[0][0] || ''}${
-      parts.length > 1 ? parts[1][0] : ''
+      parts.length > 1 ? parts[1]?.[0] || '' : ''
     }`.toUpperCase();
   };
 
@@ -120,13 +121,19 @@ const HomeDashboard = () => {
         if (docSnapshot.exists) {
           const data = docSnapshot.data();
           console.log('✅ User profile data received:', data);
-          setUserData(data);
-          setDailyNeed(calculateWaterNeed(data.weight, data.gender));
+          // ✅ NULL CHECK: Ensure data object exists and provide defaults
+          const safeData = {
+            name: user.displayName || 'User',
+            weight: 70, // Default weight
+            gender: 'male', // Default gender
+            ...data,
+          };
+          setUserData(safeData);
+          setDailyNeed(calculateWaterNeed(safeData.weight, safeData.gender));
         } else {
           console.warn(
             'User document does not exist. This should have been created on sign-up.',
           );
-          // Fallback to create a document if it's missing, though this is not ideal.
           userRef.set({
             name: user.displayName || 'User',
             email: user.email,
@@ -153,8 +160,11 @@ const HomeDashboard = () => {
           const historyEntries = [];
           querySnapshot.forEach(doc => {
             const entry = { id: doc.id, ...doc.data() };
-            historyEntries.push(entry);
-            totalConsumedToday += entry.amount;
+            // ✅ NULL CHECK: Ensure entry has a valid amount before adding
+            if (entry.amount && !isNaN(Number(entry.amount))) {
+              historyEntries.push(entry);
+              totalConsumedToday += entry.amount;
+            }
           });
           console.log(
             `✅ Water history updated. Found ${querySnapshot.size} entries. Total consumed: ${totalConsumedToday}ml`,
@@ -298,12 +308,16 @@ const HomeDashboard = () => {
 
   const handleUndo = () => {
     if (intakeHistory.length > 0) {
-      // Sort to find the most recent entry
-      const sortedHistory = [...intakeHistory].sort(
-        (a, b) => b.timestamp.toDate() - a.timestamp.toDate(),
-      );
-      const lastEntryId = sortedHistory[0].id;
-      handleDeleteIntake(lastEntryId);
+      // ✅ NULL CHECK: Safely sort array even if a timestamp is missing
+      const sortedHistory = [...intakeHistory].sort((a, b) => {
+        const timeA = a.timestamp?.toDate()?.getTime() || 0;
+        const timeB = b.timestamp?.toDate()?.getTime() || 0;
+        return timeB - timeA;
+      });
+      const lastEntryId = sortedHistory[0]?.id; // Use optional chaining
+      if (lastEntryId) {
+        handleDeleteIntake(lastEntryId);
+      }
     }
   };
 
@@ -328,7 +342,7 @@ const HomeDashboard = () => {
       }
       setModalVisible(false);
     } else {
-      alert('Please enter a valid number.');
+      Alert.alert('Invalid Amount', 'Please enter a valid number.');
     }
   };
   const handleOptionPress = amount => {
@@ -364,30 +378,7 @@ const HomeDashboard = () => {
         contentContainerStyle={styles.scrollContainer}
       >
         {/* --- HEADER --- */}
-        {/* <Animated.View
-          style={[
-            styles.headerContainer,
-            {
-              opacity: headerFadeAnim,
-              transform: [{ translateY: headerSlideAnim }],
-            },
-          ]}
-        >
-          <View style={styles.headerLeft}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {getInitials(userData?.name)}
-              </Text>
-            </View>
-            <View>
-              <Text style={styles.greetingText}>{greeting}</Text>
-              <Text style={styles.nameText}>
-                {userData?.name ? userData.name.split(' ')[0] : 'User'}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.dateText}>{currentDate}</Text>
-        </Animated.View> */}
+       
 
         {/* --- GLASS --- */}
         <View style={styles.glassContainer}>
@@ -442,9 +433,12 @@ const HomeDashboard = () => {
           <View style={styles.historyContainer}>
             <Text style={styles.historyTitle}>Today's History</Text>
             <FlatList
-              data={[...intakeHistory].sort(
-                (a, b) => b.timestamp.toDate() - a.timestamp.toDate(),
-              )}
+              data={[...intakeHistory].sort((a, b) => {
+                // ✅ NULL CHECK: Safely sort array to prevent crash
+                const timeA = a.timestamp?.toDate()?.getTime() || 0;
+                const timeB = b.timestamp?.toDate()?.getTime() || 0;
+                return timeB - timeA;
+              })}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
                 <View style={styles.historyItem}>
@@ -452,12 +446,13 @@ const HomeDashboard = () => {
                   <View style={styles.historyInfo}>
                     <Text style={styles.historyAmount}>{item.amount} ml</Text>
                     <Text style={styles.historyTime}>
-                      {item.timestamp
-                        .toDate()
-                        .toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                      {/* ✅ NULL CHECK: Safely access timestamp and show fallback */}
+                      {item.timestamp?.toDate()
+                        ? item.timestamp.toDate().toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'Invalid time'}
                     </Text>
                   </View>
                   <View style={styles.historyActions}>
@@ -536,6 +531,7 @@ const HomeDashboard = () => {
 
 export default HomeDashboard;
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7FAFC' },
   centeredContainer: {
@@ -546,6 +542,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     paddingHorizontal: 20,
+    paddingTop: 20, // Add some top padding
     paddingBottom: 40,
     alignItems: 'center',
   },
@@ -574,6 +571,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#4A5568',
     alignSelf: 'flex-start',
+    marginTop: 4, // Align better with greeting
   },
   glassContainer: {
     alignItems: 'center',

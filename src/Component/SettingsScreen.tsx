@@ -15,16 +15,10 @@ import {
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { navigate, replace } from '../Navigation/navigationutils'; // Assuming you have this helper
 
-// Reusable row components
-const SettingsRow = ({
-  label,
-  value,
-  icon,
-  isEditable,
-  onChangeText,
-  keyboardType,
-}) => (
+// --- Reusable row components ---
+const SettingsRow = ({ label, value, icon, isEditable, onChangeText, keyboardType }) => (
   <View style={styles.row}>
     <Text style={styles.rowIcon}>{icon}</Text>
     <Text style={styles.rowLabel}>{label}</Text>
@@ -52,11 +46,14 @@ const TimeSettingsRow = ({ label, value, icon, isEditable, onPress }) => (
     <Text style={styles.rowIcon}>{icon}</Text>
     <Text style={styles.rowLabel}>{label}</Text>
     <Text style={[styles.rowValue, isEditable && styles.editableText]}>
-      {new Date(value).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })}
+      {/* ✅ NULL CHECK: Ensure value is a valid Date object before formatting */}
+      {value instanceof Date && !isNaN(value)
+        ? value.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        : 'Not set'}
     </Text>
   </TouchableOpacity>
 );
@@ -69,19 +66,29 @@ const ToggleRow = ({ label, value, onValueChange, icon }) => (
       trackColor={{ false: '#E2E8F0', true: '#60A5FA' }}
       thumbColor={value ? '#3B82F6' : '#f4f3f4'}
       ios_backgroundColor="#E2E8F0"
-      onValuecha
-      nge={onValueChange}
+      onValueChange={onValueChange} // ✅ FIX: Corrected typo from "onValuecha nge"
       value={value}
     />
   </View>
 );
 
-const SettingsScreen = ({ onLogout }) => {
+// ✅ ADDED: Default state to prevent null crashes
+const defaultUserData = {
+  name: 'User',
+  email: '',
+  age: '0',
+  height: '0',
+  weight: '0',
+  wakeUpTime: new Date(),
+  sleepTime: new Date(),
+};
+
+const SettingsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [userData, setUserData] = useState(null);
-  const [originalData, setOriginalData] = useState(null);
+  const [userData, setUserData] = useState(defaultUserData);
+  const [originalData, setOriginalData] = useState(defaultUserData);
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -93,6 +100,7 @@ const SettingsScreen = ({ onLogout }) => {
     const user = auth().currentUser;
     if (!user) {
       setLoading(false);
+      navigate('Login'); // Redirect if not logged in
       return;
     }
 
@@ -102,19 +110,27 @@ const SettingsScreen = ({ onLogout }) => {
       .onSnapshot(doc => {
         if (doc.exists) {
           const data = doc.data();
+          // ✅ NULL CHECK: Safely format data and provide fallbacks
           const formattedData = {
-            ...data,
-            wakeUpTime: new Date(data.wakeUpTime),
-            sleepTime: new Date(data.sleepTime),
-            height: data.height.toString(),
-            weight: data.weight.toString(),
-            age: data.age.toString(),
+            ...defaultUserData, // Start with defaults
+            ...data, // Overwrite with Firestore data
+            // Ensure dates are valid Date objects
+            wakeUpTime: data.wakeUpTime?.toDate ? data.wakeUpTime.toDate() : new Date(),
+            sleepTime: data.sleepTime?.toDate ? data.sleepTime.toDate() : new Date(),
+            // Ensure numbers are strings for TextInput
+            height: String(data.height || '0'),
+            weight: String(data.weight || '0'),
+            age: String(data.age || '0'),
           };
           setUserData(formattedData);
           setOriginalData(formattedData);
         }
         setLoading(false);
+      }, error => {
+        console.error("Firestore subscription error:", error);
+        setLoading(false);
       });
+      
     return () => subscriber();
   }, []);
 
@@ -122,6 +138,18 @@ const SettingsScreen = ({ onLogout }) => {
     setIsSaving(true);
     const user = auth().currentUser;
     if (!user || !userData) {
+      Alert.alert('Error', 'Could not find user data to update.');
+      setIsSaving(false);
+      return;
+    }
+
+    // ✅ NULL CHECK: Validate data before sending to Firestore
+    const heightNum = parseFloat(userData.height);
+    const weightNum = parseFloat(userData.weight);
+    const ageNum = parseInt(userData.age, 10);
+
+    if (isNaN(heightNum) || isNaN(weightNum) || isNaN(ageNum)) {
+      Alert.alert('Invalid Input', 'Please ensure age, height, and weight are valid numbers.');
       setIsSaving(false);
       return;
     }
@@ -129,18 +157,19 @@ const SettingsScreen = ({ onLogout }) => {
     try {
       const updatedData = {
         name: userData.name.trim(),
-        height: parseFloat(userData.height),
-        weight: parseFloat(userData.weight),
-        age: parseInt(userData.age, 10),
-        wakeUpTime: userData.wakeUpTime.toISOString(),
-        sleepTime: userData.sleepTime.toISOString(),
+        height: heightNum,
+        weight: weightNum,
+        age: ageNum,
+        wakeUpTime: userData.wakeUpTime, // Firestore handles Date objects
+        sleepTime: userData.sleepTime,
       };
       await firestore().collection('users').doc(user.uid).update(updatedData);
       await user.updateProfile({ displayName: userData.name.trim() });
       Alert.alert('Success', 'Your profile has been updated!');
       setIsEditMode(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to update profile.');
+      console.error("Profile update error:", error);
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -151,8 +180,32 @@ const SettingsScreen = ({ onLogout }) => {
     setIsEditMode(false);
   };
 
+  // ✅ ADDED: Logout Functionality
+  const handleLogout = async () => {
+    Alert.alert(
+      "Log Out",
+      "Are you sure you want to log out?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Log Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await auth().signOut();
+              replace('Login'); // Navigate after successful logout
+            } catch (error) {
+              console.error('Logout Error:', error);
+              Alert.alert('Error', 'Failed to log out.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const onTimeChange = (event, selectedTime) => {
-    setShowPicker(false);
+    setShowPicker(Platform.OS === 'ios'); // On Android, it closes automatically
     if (selectedTime) {
       setUserData(prev => ({ ...prev, [pickerMode]: selectedTime }));
     }
@@ -164,7 +217,7 @@ const SettingsScreen = ({ onLogout }) => {
   };
 
   const getInitials = name => {
-    if (!name) return '?';
+    if (!name || typeof name !== 'string') return '?';
     const nameParts = name.split(' ');
     return `${nameParts[0]?.[0] || ''}${nameParts[1]?.[0] || ''}`.toUpperCase();
   };
@@ -183,16 +236,14 @@ const SettingsScreen = ({ onLogout }) => {
       contentContainerStyle={{ paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* --- New Avatar Header --- */}
       <View style={styles.headerContainer}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{getInitials(userData?.name)}</Text>
+          <Text style={styles.avatarText}>{getInitials(userData.name)}</Text>
         </View>
-        <Text style={styles.headerName}>{userData?.name}</Text>
-        <Text style={styles.headerEmail}>{userData?.email}</Text>
+        <Text style={styles.headerName}>{userData.name}</Text>
+        <Text style={styles.headerEmail}>{auth().currentUser?.email}</Text>
       </View>
 
-      {/* --- Profile Details Card --- */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Profile Details</Text>
@@ -204,105 +255,79 @@ const SettingsScreen = ({ onLogout }) => {
         </View>
         <SettingsRow
           label="Age"
-          value={userData?.age}
+          value={userData.age}
           icon="🎂"
           isEditable={isEditMode}
-          onChangeText={val => setUserData(prev => ({ ...prev, age: val }))}
+          onChangeText={val => setUserData(prev => ({ ...prev, age: val.replace(/[^0-9]/g, '') }))}
           keyboardType="numeric"
         />
         <SettingsRow
           label="Height (cm)"
-          value={userData?.height}
+          value={userData.height}
           icon="📏"
           isEditable={isEditMode}
-          onChangeText={val => setUserData(prev => ({ ...prev, height: val }))}
+          onChangeText={val => setUserData(prev => ({ ...prev, height: val.replace(/[^0-9.]/g, '') }))}
           keyboardType="numeric"
         />
         <SettingsRow
           label="Weight (kg)"
-          value={userData?.weight}
+          value={userData.weight}
           icon="⚖️"
           isEditable={isEditMode}
-          onChangeText={val => setUserData(prev => ({ ...prev, weight: val }))}
+          onChangeText={val => setUserData(prev => ({ ...prev, weight: val.replace(/[^0-9.]/g, '') }))}
           keyboardType="numeric"
         />
       </View>
 
-      {/* --- Daily Routine Card --- */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Daily Routine</Text>
         </View>
         <TimeSettingsRow
           label="Wake-up Time"
-          value={userData?.wakeUpTime}
+          value={userData.wakeUpTime}
           icon="☀️"
           isEditable={isEditMode}
           onPress={() => showTimePicker('wakeUpTime')}
         />
         <TimeSettingsRow
           label="Sleep Time"
-          value={userData?.sleepTime}
+          value={userData.sleepTime}
           icon="🌙"
           isEditable={isEditMode}
           onPress={() => showTimePicker('sleepTime')}
         />
       </View>
 
-      {/* --- Preferences Card --- */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Preferences</Text>
         </View>
-        <ToggleRow
-          label="Dark Mode"
-          value={isDarkMode}
-          onValueChange={setIsDarkMode}
-          icon="🎨"
-        />
-        <ToggleRow
-          label="Notifications"
-          value={notificationsEnabled}
-          onValueChange={setNotificationsEnabled}
-          icon="🔔"
-        />
+        <ToggleRow label="Dark Mode" value={isDarkMode} onValueChange={setIsDarkMode} icon="🎨" />
+        <ToggleRow label="Notifications" value={notificationsEnabled} onValueChange={setNotificationsEnabled} icon="🔔" />
       </View>
 
       {showPicker && (
         <DateTimePicker
-          value={userData?.[pickerMode]}
+          value={userData[pickerMode]}
           mode="time"
           is24Hour={false}
-          display="spinner"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={onTimeChange}
         />
       )}
 
       {isEditMode && (
         <View style={styles.editActions}>
-          <TouchableOpacity
-            style={[styles.button, styles.cancelButton]}
-            onPress={handleCancelEdit}
-          >
-            <Text style={[styles.buttonText, styles.cancelButtonText]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, styles.saveButton]}
-            onPress={handleUpdate}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Save Changes</Text>
-            )}
+          <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelEdit}><Text style={[styles.buttonText, styles.cancelButtonText]}>Cancel</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleUpdate} disabled={isSaving}>
+            {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Save Changes</Text>}
           </TouchableOpacity>
         </View>
       )}
 
-      <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
+      {/* ✅ FIX: Attached the new handleLogout function */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Log Out</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -312,7 +337,7 @@ const SettingsScreen = ({ onLogout }) => {
 export default SettingsScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F4F8' },
+  container: { flex: 1, backgroundColor: '#F0F4F8', paddingHorizontal: 16 },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -359,8 +384,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 18,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
   },
   rowIcon: { fontSize: 20, marginRight: 18, width: 24, textAlign: 'center' },
   rowLabel: { fontSize: 16, color: '#475569', flex: 1 },
@@ -373,9 +396,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   editableInput: {
-    borderBottomWidth: 1,
-    borderColor: '#CBD5E0',
-    paddingVertical: 4,
+    borderBottomWidth: 1.5,
+    borderColor: '#94A3B8',
+    paddingVertical: Platform.OS === 'ios' ? 6 : 0,
     minWidth: 60,
     fontWeight: '600',
   },
@@ -383,7 +406,6 @@ const styles = StyleSheet.create({
   editActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
     marginTop: 10,
   },
   button: {
@@ -398,8 +420,7 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
   cancelButtonText: { color: '#475569' },
   logoutButton: {
-    marginHorizontal: 20,
-    marginTop: 10,
+    marginTop: 20,
     backgroundColor: '#FEE2E2',
     paddingVertical: 16,
     borderRadius: 12,

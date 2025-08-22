@@ -36,7 +36,7 @@ const HeaderComponent = () => {
 
     // This listener will handle real-time updates for the user's profile
     const subscriber = userRef.onSnapshot(docSnapshot => {
-      if (docSnapshot.exists) {
+      if (docSnapshot?.exists) {
         console.log('User data fetched:', docSnapshot.data());
         setUserData(docSnapshot.data());
       } else {
