@@ -1,6 +1,7 @@
 // HeaderComponent.js
 
 import { StyleSheet, Text, View, SafeAreaView, Animated, Easing } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -11,52 +12,69 @@ const HeaderComponent = () => {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-30)).current;
+  const waveAnim = useRef(new Animated.Value(0)).current;
 
-  // Main useEffect for animations and fetching data
   useEffect(() => {
-    // --- Animations and Greeting Logic ---
+    // --- Fade + Slide Animation ---
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 700,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 700,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
     ]).start();
 
+    // --- Wave Animation Loop ---
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(waveAnim, {
+          toValue: 6,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(waveAnim, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Greeting logic
     const hours = new Date().getHours();
     if (hours < 12) setGreeting('Good Morning ☀️');
     else if (hours < 18) setGreeting('Good Afternoon 🌤️');
     else setGreeting('Good Evening 🌙');
 
-    // --- Firebase Listener for User Data ---
+    // Firebase user listener
     const user = auth().currentUser;
     if (!user) {
-        setUserData(null); // No user, set data to null
-        return;
+      setUserData(null);
+      return;
     }
 
     const userRef = firestore().collection('users').doc(user.uid);
-
-    // This listener will handle real-time updates for the user's profile
     const subscriber = userRef.onSnapshot(docSnapshot => {
       if (docSnapshot?.exists) {
-        console.log('User data fetched:', docSnapshot.data());
         setUserData(docSnapshot.data());
       } else {
-        console.log('User document does not exist yet.');
-        // The document will be created by another screen (e.g., UserDetails)
-        // We can set some temporary data here if needed
         setUserData({ name: user.displayName || 'User' });
       }
     });
 
-    // Unsubscribe from the listener on cleanup
     return () => subscriber();
-  }, []); // This effect runs once on mount
+  }, []);
 
   const getInitials = (name) => {
     if (!name) return '?';
-    const nameParts = name.split(' ');
-    const firstInitial = nameParts[0] ? nameParts[0][0] : '';
-    const lastInitial = nameParts.length > 1 ? nameParts[1][0] : '';
-    return `${firstInitial}${lastInitial}`.toUpperCase();
+    const parts = name.split(' ');
+    return `${parts[0][0] || ''}${parts[1] ? parts[1][0] : ''}`.toUpperCase();
   };
 
   const currentDate = new Date().toLocaleDateString('en-IN', {
@@ -67,25 +85,49 @@ const HeaderComponent = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Animated.View
-        style={[
-          styles.headerContainer,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
+      <LinearGradient
+        colors={['#3182CE', '#63B3ED']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradient}
       >
-        <View style={styles.leftContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(userData?.name)}</Text>
+        <Animated.View
+          style={[
+            styles.headerContainer,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          ]}
+        >
+          <View style={styles.leftContainer}>
+            {/* Avatar */}
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{getInitials(userData?.name)}</Text>
+            </View>
+
+            {/* Greeting + Name */}
+            <View>
+              <Text style={styles.greetingText}>{greeting}</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.nameText}>
+                  {userData?.name ? userData.name.split(' ')[0] : 'User'}
+                </Text>
+                <Animated.View
+                  style={[
+                    styles.wave,
+                    { transform: [{ translateY: waveAnim }] },
+                  ]}
+                >
+                  <Text style={styles.waveText}>~</Text>
+                </Animated.View>
+              </View>
+            </View>
           </View>
-          <View>
-            <Text style={styles.greetingText}>{greeting}</Text>
-            <Text style={styles.nameText}>
-              {userData?.name ? userData.name.split(' ')[0] : 'User'}
-            </Text>
+
+          {/* Date badge */}
+          <View style={styles.dateBadge}>
+            <Text style={styles.dateText}>{currentDate}</Text>
           </View>
-        </View>
-        <Text style={styles.dateText}>{currentDate}</Text>
-      </Animated.View>
+        </Animated.View>
+      </LinearGradient>
     </SafeAreaView>
   );
 };
@@ -93,37 +135,78 @@ const HeaderComponent = () => {
 export default HeaderComponent;
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: '#F7F9FC' },
+  safeArea: {
+    backgroundColor: '#F7F9FC',
+  },
+  gradient: {
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
+  },
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 20,
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#CBD5E0',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 8,
   },
-  leftContainer: { flexDirection: 'row', alignItems: 'center' },
+  leftContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#3182CE',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2C5282',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(255,255,255,0.7)',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 6,
+    elevation: 6,
   },
-  avatarText: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
-  greetingText: { fontSize: 16, fontWeight: '600', color: '#718096' },
-  nameText: { fontSize: 22, fontWeight: '800', color: '#1A202C', marginTop: 2 },
-  // Removed the waterText style as it's no longer used
-  dateText: { fontSize: 14, fontWeight: '600', color: '#4A5568', alignSelf: 'flex-start' },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  greetingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#E2E8F0',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  nameText: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+  wave: {
+    marginLeft: 6,
+  },
+  waveText: {
+    fontSize: 22,
+    color: '#90CDF4',
+    fontWeight: 'bold',
+  },
+  dateBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  dateText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
 });

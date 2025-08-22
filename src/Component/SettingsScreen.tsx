@@ -15,10 +15,17 @@ import {
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { navigate, replace } from '../Navigation/navigationutils'; // Assuming you have this helper
-
+import { navigate, replace } from '../Navigation/navigationutils';
+import NotificationService from './NotificationService';
 // --- Reusable row components ---
-const SettingsRow = ({ label, value, icon, isEditable, onChangeText, keyboardType }) => (
+const SettingsRow = ({
+  label,
+  value,
+  icon,
+  isEditable,
+  onChangeText,
+  keyboardType,
+}) => (
   <View style={styles.row}>
     <Text style={styles.rowIcon}>{icon}</Text>
     <Text style={styles.rowLabel}>{label}</Text>
@@ -46,7 +53,6 @@ const TimeSettingsRow = ({ label, value, icon, isEditable, onPress }) => (
     <Text style={styles.rowIcon}>{icon}</Text>
     <Text style={styles.rowLabel}>{label}</Text>
     <Text style={[styles.rowValue, isEditable && styles.editableText]}>
-      {/* ✅ NULL CHECK: Ensure value is a valid Date object before formatting */}
       {value instanceof Date && !isNaN(value)
         ? value.toLocaleTimeString([], {
             hour: '2-digit',
@@ -66,13 +72,12 @@ const ToggleRow = ({ label, value, onValueChange, icon }) => (
       trackColor={{ false: '#E2E8F0', true: '#60A5FA' }}
       thumbColor={value ? '#3B82F6' : '#f4f3f4'}
       ios_backgroundColor="#E2E8F0"
-      onValueChange={onValueChange} // ✅ FIX: Corrected typo from "onValuecha nge"
+      onValueChange={onValueChange}
       value={value}
     />
   </View>
 );
 
-// ✅ ADDED: Default state to prevent null crashes
 const defaultUserData = {
   name: 'User',
   email: '',
@@ -90,8 +95,8 @@ const SettingsScreen = () => {
   const [userData, setUserData] = useState(defaultUserData);
   const [originalData, setOriginalData] = useState(defaultUserData);
 
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  // <<< 2. ADD STATE FOR HOURLY NOTIFICATIONS
+  const [hourlyNotifications, setHourlyNotifications] = useState(false);
 
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState('wakeUpTime');
@@ -100,39 +105,61 @@ const SettingsScreen = () => {
     const user = auth().currentUser;
     if (!user) {
       setLoading(false);
-      navigate('Login'); // Redirect if not logged in
+      navigate('Login');
       return;
     }
 
     const subscriber = firestore()
       .collection('users')
       .doc(user.uid)
-      .onSnapshot(doc => {
-        if (doc.exists) {
-          const data = doc.data();
-          // ✅ NULL CHECK: Safely format data and provide fallbacks
-          const formattedData = {
-            ...defaultUserData, // Start with defaults
-            ...data, // Overwrite with Firestore data
-            // Ensure dates are valid Date objects
-            wakeUpTime: data.wakeUpTime?.toDate ? data.wakeUpTime.toDate() : new Date(),
-            sleepTime: data.sleepTime?.toDate ? data.sleepTime.toDate() : new Date(),
-            // Ensure numbers are strings for TextInput
-            height: String(data.height || '0'),
-            weight: String(data.weight || '0'),
-            age: String(data.age || '0'),
-          };
-          setUserData(formattedData);
-          setOriginalData(formattedData);
-        }
-        setLoading(false);
-      }, error => {
-        console.error("Firestore subscription error:", error);
-        setLoading(false);
-      });
-      
+      .onSnapshot(
+        doc => {
+          if (doc.exists) {
+            const data = doc.data();
+            const formattedData = {
+              ...defaultUserData,
+              ...data,
+              wakeUpTime: data.wakeUpTime?.toDate
+                ? data.wakeUpTime.toDate()
+                : new Date(),
+              sleepTime: data.sleepTime?.toDate
+                ? data.sleepTime.toDate()
+                : new Date(),
+              height: String(data.height || '0'),
+              weight: String(data.weight || '0'),
+              age: String(data.age || '0'),
+            };
+            setUserData(formattedData);
+            setOriginalData(formattedData);
+          }
+          setLoading(false);
+        },
+        error => {
+          console.error('Firestore subscription error:', error);
+          setLoading(false);
+        },
+      );
+
     return () => subscriber();
   }, []);
+
+  // <<< 3. CREATE HANDLER FOR NOTIFICATION TOGGLE
+  const handleToggleHourlyNotifications = async (value) => {
+    setHourlyNotifications(value);
+    if (value) {
+      const success = await NotificationService.scheduleHourlyNotification();
+      if (success) {
+        Alert.alert('Reminders On', 'You will be reminded to drink water every hour.');
+      } else {
+        Alert.alert('Error', 'Could not schedule reminders. Please check your permissions.');
+        setHourlyNotifications(false); // Revert toggle on failure
+      }
+    } else {
+      await NotificationService.cancelAllNotifications();
+      Alert.alert('Reminders Off', 'Hourly reminders have been turned off.');
+    }
+  };
+
 
   const handleUpdate = async () => {
     setIsSaving(true);
@@ -143,13 +170,15 @@ const SettingsScreen = () => {
       return;
     }
 
-    // ✅ NULL CHECK: Validate data before sending to Firestore
     const heightNum = parseFloat(userData.height);
     const weightNum = parseFloat(userData.weight);
     const ageNum = parseInt(userData.age, 10);
 
     if (isNaN(heightNum) || isNaN(weightNum) || isNaN(ageNum)) {
-      Alert.alert('Invalid Input', 'Please ensure age, height, and weight are valid numbers.');
+      Alert.alert(
+        'Invalid Input',
+        'Please ensure age, height, and weight are valid numbers.',
+      );
       setIsSaving(false);
       return;
     }
@@ -160,7 +189,7 @@ const SettingsScreen = () => {
         height: heightNum,
         weight: weightNum,
         age: ageNum,
-        wakeUpTime: userData.wakeUpTime, // Firestore handles Date objects
+        wakeUpTime: userData.wakeUpTime,
         sleepTime: userData.sleepTime,
       };
       await firestore().collection('users').doc(user.uid).update(updatedData);
@@ -168,7 +197,7 @@ const SettingsScreen = () => {
       Alert.alert('Success', 'Your profile has been updated!');
       setIsEditMode(false);
     } catch (error) {
-      console.error("Profile update error:", error);
+      console.error('Profile update error:', error);
       Alert.alert('Error', 'Failed to update profile. Please try again.');
     } finally {
       setIsSaving(false);
@@ -180,32 +209,27 @@ const SettingsScreen = () => {
     setIsEditMode(false);
   };
 
-  // ✅ ADDED: Logout Functionality
   const handleLogout = async () => {
-    Alert.alert(
-      "Log Out",
-      "Are you sure you want to log out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Log Out",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await auth().signOut();
-              replace('Login'); // Navigate after successful logout
-            } catch (error) {
-              console.error('Logout Error:', error);
-              Alert.alert('Error', 'Failed to log out.');
-            }
-          },
+    Alert.alert('Log Out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await auth().signOut();
+            replace('Login');
+          } catch (error) {
+            console.error('Logout Error:', error);
+            Alert.alert('Error', 'Failed to log out.');
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const onTimeChange = (event, selectedTime) => {
-    setShowPicker(Platform.OS === 'ios'); // On Android, it closes automatically
+    setShowPicker(Platform.OS === 'ios');
     if (selectedTime) {
       setUserData(prev => ({ ...prev, [pickerMode]: selectedTime }));
     }
@@ -258,7 +282,9 @@ const SettingsScreen = () => {
           value={userData.age}
           icon="🎂"
           isEditable={isEditMode}
-          onChangeText={val => setUserData(prev => ({ ...prev, age: val.replace(/[^0-9]/g, '') }))}
+          onChangeText={val =>
+            setUserData(prev => ({ ...prev, age: val.replace(/[^0--9]/g, '') }))
+          }
           keyboardType="numeric"
         />
         <SettingsRow
@@ -266,7 +292,12 @@ const SettingsScreen = () => {
           value={userData.height}
           icon="📏"
           isEditable={isEditMode}
-          onChangeText={val => setUserData(prev => ({ ...prev, height: val.replace(/[^0-9.]/g, '') }))}
+          onChangeText={val =>
+            setUserData(prev => ({
+              ...prev,
+              height: val.replace(/[^0-9.]/g, ''),
+            }))
+          }
           keyboardType="numeric"
         />
         <SettingsRow
@@ -274,7 +305,12 @@ const SettingsScreen = () => {
           value={userData.weight}
           icon="⚖️"
           isEditable={isEditMode}
-          onChangeText={val => setUserData(prev => ({ ...prev, weight: val.replace(/[^0-9.]/g, '') }))}
+          onChangeText={val =>
+            setUserData(prev => ({
+              ...prev,
+              weight: val.replace(/[^0-9.]/g, ''),
+            }))
+          }
           keyboardType="numeric"
         />
       </View>
@@ -303,8 +339,21 @@ const SettingsScreen = () => {
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>Preferences</Text>
         </View>
-        <ToggleRow label="Dark Mode" value={isDarkMode} onValueChange={setIsDarkMode} icon="🎨" />
-        <ToggleRow label="Notifications" value={notificationsEnabled} onValueChange={setNotificationsEnabled} icon="🔔" />
+        <ToggleRow
+          label="Dark Mode (Coming Soon)"
+          value={false}
+          onValueChange={() => {
+            Alert.alert('Coming Soon!', 'Dark Mode will be available in a future update.');
+          }}
+          icon="🎨"
+        />
+        {/* <<< 4. UPDATE THE NOTIFICATION TOGGLE */}
+        <ToggleRow
+          label="Hourly Water Reminder"
+          value={hourlyNotifications}
+          onValueChange={handleToggleHourlyNotifications}
+          icon="⏰"
+        />
       </View>
 
       {showPicker && (
@@ -319,14 +368,28 @@ const SettingsScreen = () => {
 
       {isEditMode && (
         <View style={styles.editActions}>
-          <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={handleCancelEdit}><Text style={[styles.buttonText, styles.cancelButtonText]}>Cancel</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleUpdate} disabled={isSaving}>
-            {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Save Changes</Text>}
+          <TouchableOpacity
+            style={[styles.button, styles.cancelButton]}
+            onPress={handleCancelEdit}
+          >
+            <Text style={[styles.buttonText, styles.cancelButtonText]}>
+              Cancel
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.saveButton]}
+            onPress={handleUpdate}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.buttonText}>Save Changes</Text>
+            )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* ✅ FIX: Attached the new handleLogout function */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Log Out</Text>
       </TouchableOpacity>
