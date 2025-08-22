@@ -17,7 +17,8 @@ import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { navigate, replace } from '../Navigation/navigationutils';
 import NotificationService from './NotificationService';
-// --- Reusable row components ---
+
+// --- Reusable row components (No changes here) ---
 const SettingsRow = ({
   label,
   value,
@@ -64,7 +65,7 @@ const TimeSettingsRow = ({ label, value, icon, isEditable, onPress }) => (
   </TouchableOpacity>
 );
 
-const ToggleRow = ({ label, value, onValueChange, icon }) => (
+const ToggleRow = ({ label, value, onValueChange, icon, disabled = false }) => (
   <View style={styles.row}>
     <Text style={styles.rowIcon}>{icon}</Text>
     <Text style={styles.rowLabel}>{label}</Text>
@@ -74,6 +75,7 @@ const ToggleRow = ({ label, value, onValueChange, icon }) => (
       ios_backgroundColor="#E2E8F0"
       onValueChange={onValueChange}
       value={value}
+      disabled={disabled}
     />
   </View>
 );
@@ -86,6 +88,7 @@ const defaultUserData = {
   weight: '0',
   wakeUpTime: new Date(),
   sleepTime: new Date(),
+  hourlyNotifications: false,
 };
 
 const SettingsScreen = () => {
@@ -95,11 +98,35 @@ const SettingsScreen = () => {
   const [userData, setUserData] = useState(defaultUserData);
   const [originalData, setOriginalData] = useState(defaultUserData);
 
-  // <<< 2. ADD STATE FOR HOURLY NOTIFICATIONS
-  const [hourlyNotifications, setHourlyNotifications] = useState(false);
+  // --- IMPROVEMENT: A specific loading state for the notification toggle ---
+  const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
 
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState('wakeUpTime');
+
+  // --- IMPROVEMENT: A centralized error handler for cleaner code and better user feedback ---
+  const handleError = (error, contextTitle = 'An Error Occurred') => {
+    console.error(`[${contextTitle}]`, error);
+    // Create a more user-friendly message
+    let message = 'Please check your connection and try again.';
+    if (error.code) {
+      switch (error.code) {
+        case 'auth/network-request-failed':
+          message =
+            'A network error occurred. Please check your internet connection.';
+          break;
+        case 'firestore/permission-denied':
+          message = 'You do not have permission to perform this action.';
+          break;
+        default:
+          message = error.message;
+          break;
+      }
+    } else if (error.message) {
+      message = error.message;
+    }
+    Alert.alert(contextTitle, message);
+  };
 
   useEffect(() => {
     const user = auth().currentUser;
@@ -108,7 +135,6 @@ const SettingsScreen = () => {
       navigate('Login');
       return;
     }
-
     const subscriber = firestore()
       .collection('users')
       .doc(user.uid)
@@ -128,6 +154,7 @@ const SettingsScreen = () => {
               height: String(data.height || '0'),
               weight: String(data.weight || '0'),
               age: String(data.age || '0'),
+              hourlyNotifications: data.hourlyNotifications || false,
             };
             setUserData(formattedData);
             setOriginalData(formattedData);
@@ -135,37 +162,55 @@ const SettingsScreen = () => {
           setLoading(false);
         },
         error => {
-          console.error('Firestore subscription error:', error);
+          handleError(error, 'Data Fetch Error');
           setLoading(false);
         },
       );
-
     return () => subscriber();
   }, []);
 
-  // <<< 3. CREATE HANDLER FOR NOTIFICATION TOGGLE
-  const handleToggleHourlyNotifications = async (value) => {
-    setHourlyNotifications(value);
-    if (value) {
-      const success = await NotificationService.scheduleHourlyNotification();
-      if (success) {
-        Alert.alert('Reminders On', 'You will be reminded to drink water every hour.');
+  const handleToggleHourlyNotifications = async value => {
+    const user = auth().currentUser;
+    if (!user) return;
+
+    setIsUpdatingNotifications(true);
+    setUserData(prev => ({ ...prev, hourlyNotifications: value }));
+
+    try {
+      await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .set({ hourlyNotifications: value }, { merge: true });
+
+      if (value) {
+        const success = await NotificationService.scheduleHourlyNotification();
+        if (!success) {
+          throw new Error(
+            'Could not schedule reminders. Please check app permissions.',
+          );
+        }
+        Alert.alert(
+          'Reminders On',
+          'You will be reminded to drink water every hour.',
+        );
       } else {
-        Alert.alert('Error', 'Could not schedule reminders. Please check your permissions.');
-        setHourlyNotifications(false); // Revert toggle on failure
+        await NotificationService.cancelAllNotifications();
+        Alert.alert('Reminders Off', 'Hourly reminders have been turned off.');
       }
-    } else {
-      await NotificationService.cancelAllNotifications();
-      Alert.alert('Reminders Off', 'Hourly reminders have been turned off.');
+    } catch (error) {
+      // Revert the optimistic UI update on failure
+      setUserData(prev => ({ ...prev, hourlyNotifications: !value }));
+      handleError(error, 'Reminder Update Failed');
+    } finally {
+      setIsUpdatingNotifications(false);
     }
   };
-
 
   const handleUpdate = async () => {
     setIsSaving(true);
     const user = auth().currentUser;
-    if (!user || !userData) {
-      Alert.alert('Error', 'Could not find user data to update.');
+    if (!user) {
+      Alert.alert('Error', 'Not logged in.');
       setIsSaving(false);
       return;
     }
@@ -197,8 +242,7 @@ const SettingsScreen = () => {
       Alert.alert('Success', 'Your profile has been updated!');
       setIsEditMode(false);
     } catch (error) {
-      console.error('Profile update error:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      handleError(error, 'Profile Update Failed');
     } finally {
       setIsSaving(false);
     }
@@ -209,7 +253,7 @@ const SettingsScreen = () => {
     setIsEditMode(false);
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -220,8 +264,7 @@ const SettingsScreen = () => {
             await auth().signOut();
             replace('Login');
           } catch (error) {
-            console.error('Logout Error:', error);
-            Alert.alert('Error', 'Failed to log out.');
+            handleError(error, 'Logout Failed');
           }
         },
       },
@@ -283,7 +326,7 @@ const SettingsScreen = () => {
           icon="🎂"
           isEditable={isEditMode}
           onChangeText={val =>
-            setUserData(prev => ({ ...prev, age: val.replace(/[^0--9]/g, '') }))
+            setUserData(prev => ({ ...prev, age: val.replace(/[^0-9]/g, '') }))
           }
           keyboardType="numeric"
         />
@@ -343,16 +386,19 @@ const SettingsScreen = () => {
           label="Dark Mode (Coming Soon)"
           value={false}
           onValueChange={() => {
-            Alert.alert('Coming Soon!', 'Dark Mode will be available in a future update.');
+            Alert.alert(
+              'Coming Soon!',
+              'Dark Mode will be available in a future update.',
+            );
           }}
           icon="🎨"
         />
-        {/* <<< 4. UPDATE THE NOTIFICATION TOGGLE */}
         <ToggleRow
           label="Hourly Water Reminder"
-          value={hourlyNotifications}
+          value={userData.hourlyNotifications}
           onValueChange={handleToggleHourlyNotifications}
           icon="⏰"
+          disabled={isUpdatingNotifications} // --- IMPROVEMENT: Disable toggle during update ---
         />
       </View>
 
