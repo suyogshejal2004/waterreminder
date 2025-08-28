@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
-import { navigate } from '../Navigation/navigationutils'; // Assuming you have this helper
+import { navigate, replace } from '../Navigation/navigationutils'; // Assuming you have this helper
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -38,7 +38,7 @@ const LoginScreen = () => {
 
         if (userDoc.exists) {
           console.log("User details found, navigating to HomeScreen.");
-          navigate("HomeScreen", { userDetails: userDoc.data() });
+          replace("HomeScreen", { userDetails: userDoc.data() });
         } else {
           console.log("User details not found, navigating to UserDetails.");
           navigate("UserDetails");

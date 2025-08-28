@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import messaging from '@react-native-firebase/messaging'; // --- 1. IMPORT MESSAGING ---
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // A memoized InputField to prevent keyboard issues
@@ -47,13 +48,13 @@ const UserDetails = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
 
   // New state for advanced details
-  const [gender, setGender] = useState(null); // 'male' or 'female'
-  const [wakeUpTime, setWakeUpTime] = useState(new Date(new Date().setHours(7, 0, 0, 0))); // Default to 7:00 AM
-  const [sleepTime, setSleepTime] = useState(new Date(new Date().setHours(22, 0, 0, 0))); // Default to 10:00 PM
+  const [gender, setGender] = useState(null);
+  const [wakeUpTime, setWakeUpTime] = useState(new Date(new Date().setHours(7, 0, 0, 0)));
+  const [sleepTime, setSleepTime] = useState(new Date(new Date().setHours(22, 0, 0, 0)));
 
   // State for the time picker modal
   const [showPicker, setShowPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState('wake'); // 'wake' or 'sleep'
+  const [pickerMode, setPickerMode] = useState('wake');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -81,37 +82,82 @@ const UserDetails = ({ navigation }) => {
     setShowPicker(true);
   };
 
+  // --- 2. ADDED DETAILED LOGS TO HANDLE SUBMIT ---
   const handleSubmit = async () => {
+    console.log("--- SUBMIT BUTTON PRESSED ---");
+    console.log(`Data entered: Name=${name}, Gender=${gender}, Height=${height}, Weight=${weight}, Age=${age}`);
+
     if (!name.trim() || !height.trim() || !weight.trim() || !age.trim() || !gender) {
       Alert.alert("Missing Fields", "Please fill in all your details to proceed.");
+      console.log("Validation failed: Missing fields.");
       return;
     }
-    // ... other validations ...
 
     setLoading(true);
     const user = auth().currentUser;
+    if (!user) {
+        setLoading(false);
+        Alert.alert("Authentication Error", "No user is currently logged in.");
+        console.error("Submit failed: No authenticated user found.");
+        return;
+    }
+    console.log(`Authenticated user found: ${user.uid}`);
 
-    if (user) {
-      try {
+    try {
         const userDetails = {
-          name: name.trim(),
-          height: parseFloat(height),
-          weight: parseFloat(weight),
-          age: parseInt(age, 10),
-          gender: gender,
-          wakeUpTime: wakeUpTime.toISOString(),
-          sleepTime: sleepTime.toISOString(),
-          detailsCompleted: true,
+            name: name.trim(),
+            height: parseFloat(height),
+            weight: parseFloat(weight),
+            age: parseInt(age, 10),
+            gender: gender,
+            wakeUpTime: wakeUpTime, // Firestore handles Date objects correctly
+            sleepTime: sleepTime,
+            detailsCompleted: true,
+            hourlyNotifications: false, // Default reminder state to OFF
         };
-        
+        console.log("Step A: User details object created:", userDetails);
+
+        // --- DETAILED LOGGING FOR NOTIFICATION SETUP ---
+        console.log("--- Starting Notification Setup ---");
+        try {
+            console.log("Step B: Requesting notification permission from user...");
+            const authStatus = await messaging().requestPermission();
+            const enabled =
+                authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+                authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+            
+            console.log(`Step C: Permission status received. Enabled: ${enabled}`);
+
+            if (enabled) {
+                console.log("Step D: Getting FCM token from Firebase...");
+                const fcmToken = await messaging().getToken();
+                if (fcmToken) {
+                    console.log(`Step E: SUCCESS! Retrieved FCM token: ${fcmToken}`);
+                    userDetails.fcmToken = fcmToken; // Add token to the object
+                } else {
+                    console.warn("Step E: FAILED to get FCM token. It was null or empty.");
+                }
+            }
+        } catch (notifError) {
+            console.error("NOTIFICATION SETUP FAILED. User can enable reminders later in settings.", notifError);
+        }
+        // --- End of Notification Logging ---
+
+        console.log("Step F: Saving final user details object to Firestore:", userDetails);
         await firestore().collection('users').doc(user.uid).set(userDetails, { merge: true });
+        console.log("Step G: Firestore save successful.");
+
+        console.log("Step H: Updating user's display name...");
         await user.updateProfile({ displayName: name.trim() });
+        console.log("Step I: Display name update successful.");
+
+        console.log("--- PROCESS COMPLETE: Navigating to HomeScreen ---");
         navigation.replace("HomeScreen", { userDetails });
-      } catch (error) {
+
+    } catch (error) {
         setLoading(false);
         Alert.alert("Upload Failed", "Something went wrong. Please try again.");
-        console.error('Error saving user details:', error);
-      }
+        console.error('--- CATASTROPHIC ERROR during handleSubmit ---:', error);
     }
   };
 
@@ -167,7 +213,6 @@ const UserDetails = ({ navigation }) => {
             onFocus={() => setActiveInput('Age')} onBlur={() => setActiveInput(null)} isFocused={activeInput === 'Age'}
           />
 
-          {/* --- *** UPDATED TIME SELECTOR UI *** --- */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Daily Routine</Text>
             <View style={styles.timeSelectorCard}>
@@ -189,7 +234,7 @@ const UserDetails = ({ navigation }) => {
             <DateTimePicker
               value={pickerMode === 'wake' ? wakeUpTime : sleepTime}
               mode="time"
-              is24Hour={false} // Set to false for AM/PM
+              is24Hour={false}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={onTimeChange}
             />
@@ -232,7 +277,6 @@ const styles = StyleSheet.create({
   genderButtonSelected: { borderColor: '#3182CE', backgroundColor: '#EBF8FF', transform: [{ scale: 1.05 }] },
   genderIcon: { fontSize: 28, color: '#4A5568' },
   genderText: { fontSize: 16, fontWeight: '600', color: '#2D3748', marginTop: 8 },
-  // *** New styles for the improved Time Selector ***
   timeSelectorCard: {
     backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0',
     shadowColor: '#CBD5E0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2
@@ -256,7 +300,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1A202C',
     fontWeight: '600',
-    marginLeft: 'auto' // Pushes the time to the right
+    marginLeft: 'auto'
   },
   divider: {
     height: 1,

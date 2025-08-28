@@ -11,14 +11,16 @@ import {
   ActivityIndicator,
   Platform,
   Switch,
+  Linking,
+  PermissionsAndroid, // --- 1. IMPORT PERMISSIONSANDROID ---
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import messaging from '@react-native-firebase/messaging';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { navigate, replace } from '../Navigation/navigationutils';
-import NotificationService from './NotificationService';
 
-// --- Reusable row components (No changes here) ---
+// --- Reusable row components ---
 const SettingsRow = ({
   label,
   value,
@@ -80,6 +82,14 @@ const ToggleRow = ({ label, value, onValueChange, icon, disabled = false }) => (
   </View>
 );
 
+const LinkRow = ({ label, icon, onPress }) => (
+  <TouchableOpacity style={styles.row} onPress={onPress}>
+    <Text style={styles.rowIcon}>{icon}</Text>
+    <Text style={styles.rowLabel}>{label}</Text>
+    <Text style={styles.rowValue}>›</Text>
+  </TouchableOpacity>
+);
+
 const defaultUserData = {
   name: 'User',
   email: '',
@@ -97,17 +107,12 @@ const SettingsScreen = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [userData, setUserData] = useState(defaultUserData);
   const [originalData, setOriginalData] = useState(defaultUserData);
-
-  // --- IMPROVEMENT: A specific loading state for the notification toggle ---
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
-
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState('wakeUpTime');
 
-  // --- IMPROVEMENT: A centralized error handler for cleaner code and better user feedback ---
   const handleError = (error, contextTitle = 'An Error Occurred') => {
     console.error(`[${contextTitle}]`, error);
-    // Create a more user-friendly message
     let message = 'Please check your connection and try again.';
     if (error.code) {
       switch (error.code) {
@@ -169,37 +174,83 @@ const SettingsScreen = () => {
     return () => subscriber();
   }, []);
 
+  // --- 2. NEW: CROSS-PLATFORM PERMISSION REQUEST ---
+  const requestUserPermission = async () => {
+    try {
+      // For Android 13 (API 33) and higher, you must request POST_NOTIFICATIONS
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.log('Android 13+ notification permission denied.');
+          return false;
+        }
+      }
+
+      // For iOS and older Android, use the messaging permission request
+      const authStatus = await messaging().requestPermission();
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+      console.log('Authorization status:', authStatus);
+      return enabled;
+    } catch (error) {
+      console.error('Permission request error:', error);
+      return false;
+    }
+  };
+
+  // --- 3. UPDATED: HANDLE NOTIFICATION TOGGLE WITH TOPIC SUBSCRIPTION ---
   const handleToggleHourlyNotifications = async value => {
     const user = auth().currentUser;
     if (!user) return;
 
     setIsUpdatingNotifications(true);
+    const previousValue = userData.hourlyNotifications;
+    // Optimistically update the UI
     setUserData(prev => ({ ...prev, hourlyNotifications: value }));
 
     try {
-      await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .set({ hourlyNotifications: value }, { merge: true });
-
       if (value) {
-        const success = await NotificationService.scheduleHourlyNotification();
-        if (!success) {
-          throw new Error(
-            'Could not schedule reminders. Please check app permissions.',
+        // --- User is turning notifications ON ---
+        const enabled = await requestUserPermission();
+
+        if (enabled) {
+          // Subscribe the user to the 'water-reminders' topic
+          await messaging().subscribeToTopic('water-reminders');
+          console.log('Subscribed to water-reminders topic!');
+
+          // Save the preference to Firestore
+          await firestore()
+            .collection('users')
+            .doc(user.uid)
+            .set({ hourlyNotifications: true }, { merge: true });
+          Alert.alert(
+            'Reminders On',
+            'You will now receive hourly water reminders!',
           );
+        } else {
+          // If permission is denied, revert the toggle and throw an error
+          throw new Error('Notification permission denied.');
         }
-        Alert.alert(
-          'Reminders On',
-          'You will be reminded to drink water every hour.',
-        );
       } else {
-        await NotificationService.cancelAllNotifications();
+        // --- User is turning notifications OFF ---
+        // Unsubscribe from the topic
+        await messaging().unsubscribeFromTopic('water-reminders');
+        console.log('Unsubscribed from water-reminders topic.');
+
+        // Save the preference to Firestore
+        await firestore()
+          .collection('users')
+          .doc(user.uid)
+          .set({ hourlyNotifications: false }, { merge: true });
         Alert.alert('Reminders Off', 'Hourly reminders have been turned off.');
       }
     } catch (error) {
-      // Revert the optimistic UI update on failure
-      setUserData(prev => ({ ...prev, hourlyNotifications: !value }));
+      // If anything fails, revert the toggle to its previous state
+      setUserData(prev => ({ ...prev, hourlyNotifications: previousValue }));
       handleError(error, 'Reminder Update Failed');
     } finally {
       setIsUpdatingNotifications(false);
@@ -261,6 +312,7 @@ const SettingsScreen = () => {
         style: 'destructive',
         onPress: async () => {
           try {
+            await messaging().deleteToken(); // Good practice to clear token on logout
             await auth().signOut();
             replace('Login');
           } catch (error) {
@@ -398,8 +450,28 @@ const SettingsScreen = () => {
           value={userData.hourlyNotifications}
           onValueChange={handleToggleHourlyNotifications}
           icon="⏰"
-          disabled={isUpdatingNotifications} // --- IMPROVEMENT: Disable toggle during update ---
+          disabled={isUpdatingNotifications}
         />
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>About & Support</Text>
+        </View>
+       
+        <LinkRow
+          label="Privacy Policy"
+          icon="🛡️"
+          onPress={() => Linking.openURL('https://suyogshejal2004.github.io/aquabuddy-privacy-policy/')}
+        />
+        <LinkRow
+          label="Contact Support"
+          icon="✉️"
+          onPress={() => Linking.openURL('mailto:suyogshejal2004@gmail.com')}
+        />
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Developed by Suyog Shejal</Text>
+        </View>
       </View>
 
       {showPicker && (
@@ -536,4 +608,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutButtonText: { color: '#EF4444', fontSize: 16, fontWeight: 'bold' },
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  footerText: { fontSize: 14, color: '#64748B' },
 });
