@@ -76,10 +76,10 @@ This is my **first Play Store app** and a step forward in my mobile development 
 
 - [x] Splash Screen  
 - [x] Onboarding Screens  
-- [ ] Login & Registration  
-- [ ] Home Dashboard  
-- [ ] Notifications & Reminders  
-- [ ] Play Store Release  
+- [x] Login & Registration  
+- [x] Home Dashboard  
+- [x] Notifications & Reminders  
+- [x] Play Store Release  
 
 ---
 
