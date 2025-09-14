@@ -1,99 +1,79 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# 💧 AquaAlert – Stay Hydrated, Stay Healthy 🚀  
 
-# Getting Started
-[![Watch the video](https://img.youtube.com/vi/VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=VIDEO_ID)
+AquaAlert is a mobile app built with **React Native** that helps users track daily water intake, stay hydrated, and build healthy habits.  
+This is my **first Play Store app** and a step forward in my mobile development journey.  
 
+---
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## 📱 Features  
 
-## Step 1: Start Metro
+- ✨ **Splash Screen** with animations, sound, and smooth transitions  
+- 🎬 **Onboarding Screens** with Lottie animations & intro slider  
+- 🔑 **Firebase Authentication** (Login/Signup)  
+- 📊 **Firestore integration** for storing user details  
+- 🔔 **Smart reminders** to drink water  
+- 📈 Track hydration goals & progress  
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+---
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## 🛠️ Tech Stack  
 
-```sh
-# Using npm
-npm start
+- **React Native**  
+- **Lottie** (for animations)  
+- **React Native Sound** (for audio)  
+- **LinearGradient** (for gradients)  
+- **Firebase Auth & Firestore**  
+- **AppIntroSlider**  
 
-# OR using Yarn
-yarn start
-```
+---
 
-## Step 2: Build and run your app
+## 🎥 Demo Video  
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+👉 Watch the full walkthrough on YouTube: [Click Here](YOUR_YOUTUBE_LINK)  
 
-### Android
+---
 
-```sh
-# Using npm
-npm run android
+## 📸 Screenshots  
 
-# OR using Yarn
-yarn android
-```
+<p align="center">
+  <img src="screenshots/splash.png" width="250" />
+  <img src="screenshots/onboarding1.png" width="250" />
+  <img src="screenshots/onboarding2.png" width="250" />
+</p>
 
-### iOS
+---
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## 🎯 What I Learned  
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+- Creating smooth **Splash Screens** with animations + sound  
+- Implementing **multi-step onboarding flows**  
+- Using **Firebase** for authentication & user data  
+- Combining **UI/UX with animations** for a modern experience  
+- Structuring a React Native project for scalability  
 
-```sh
-bundle install
-```
+---
 
-Then, and every time you update your native dependencies, run:
+## 🚀 Roadmap  
 
-```sh
-bundle exec pod install
-```
+- [x] Splash Screen  
+- [x] Onboarding Screens  
+- [ ] Login & Registration  
+- [ ] Home Dashboard  
+- [ ] Notifications & Reminders  
+- [ ] Play Store Release  
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+---
 
-```sh
-# Using npm
-npm run ios
+## 🙌 Contributing  
 
-# OR using Yarn
-yarn ios
-```
+This is my learning project. Suggestions, ideas, or improvements are always welcome!  
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+---
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+## 📬 Contact  
 
-## Step 3: Modify your app
+👤 **Suyog Shejal**  
+- LinkedIn: [www.linkedin.com/in/suyog-shejal-8637a3316](https://www.linkedin.com/in/suyog-shejal-8637a3316)  
+- Email: suyogshejal2004@gmail.com  
 
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+---
