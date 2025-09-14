@@ -117,6 +117,7 @@ exports.sendReminderNotification = functions.firestore
         };
         await admin.messaging().sendToDevice(reminder.fcmToken, payload);
     });
+```
 ---
 ## 🙌 Contributing  
 
