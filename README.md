@@ -82,7 +82,42 @@ This is my **first Play Store app** and a step forward in my mobile development 
 - [x] Play Store Release  
 
 ---
+## 🔔 Notification System
 
+I integrated a **real-time notification system** into AquaAlert using:
+
+- **Firebase Functions** → for serverless backend logic  
+- **Firebase Cloud Messaging (FCM)** → for push notifications  
+
+📩 Now users will get **instant alerts** for reminders & water goals!
+
+### 🔧 How it Works
+1. **Firestore Trigger** → When a new reminder is added, Firebase Function runs.  
+2. **Cloud Function** → Sends a push notification via **FCM**.  
+3. **React Native App** → Receives & displays the notification (foreground/background).  
+
+### 🚀 Tech Stack
+- Firebase Functions  
+- Firebase Admin SDK  
+- Firebase Cloud Messaging (FCM)  
+- React Native Firebase  
+
+### 📜 Sample Function Code
+```js
+exports.sendReminderNotification = functions.firestore
+    .document("reminders/{reminderId}")
+    .onCreate(async (snapshot, context) => {
+        const reminder = snapshot.data();
+        const payload = {
+            notification: {
+                title: "💧 AquaAlert Reminder",
+                body: `Time to drink water! ${reminder.message || ""}`,
+                sound: "default",
+            },
+        };
+        await admin.messaging().sendToDevice(reminder.fcmToken, payload);
+    });
+---
 ## 🙌 Contributing  
 
 This is my learning project. Suggestions, ideas, or improvements are always welcome!  
