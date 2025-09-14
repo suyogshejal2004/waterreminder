@@ -12,7 +12,7 @@ import {
   Platform,
   ScrollView
 } from 'react-native';
-import { navigate } from '../Navigation/navigationutils';
+import { navigate, replace } from '../Navigation/navigationutils';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
@@ -51,7 +51,7 @@ const RegisterScreen = () => {
         // Step 3: Redirect to the UserDetails screen for the new user to enter their info.
         // This is the logic you requested.
         console.log('Registration successful! Navigating to UserDetails screen...');
-        navigate("UserDetails");
+        replace("UserDetails");
       }
 
     } catch (error) {

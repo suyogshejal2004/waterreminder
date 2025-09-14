@@ -41,7 +41,7 @@ const LoginScreen = () => {
           replace("HomeScreen", { userDetails: userDoc.data() });
         } else {
           console.log("User details not found, navigating to UserDetails.");
-          navigate("UserDetails");
+          replace("UserDetails");
         }
       }
     } catch (error) {
